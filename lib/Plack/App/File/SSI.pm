@@ -163,6 +163,39 @@ sub _ssi_exp_echo {
     return '';
 }
 
+sub _ssi_exp_exec {
+    my($self, $expression, $FH, $ssi_variables) = @_;
+    my($cmd) = $expression =~ /cmd="([^"]+)"/ ? $1 : undef;
+
+    if(defined $cmd) {
+        return join '', qx{$cmd};
+    }
+
+    warn "Found SSI cmd expression, but no command ($expression)" if DEBUG;
+    return '';
+}
+
+sub _ssi_exp_fsize {
+    my($self, $expression, $FH, $ssi_variables) = @_;
+    my $file = $self->_expression_to_file($expression) or return '';
+
+    return eval { $file->stat->size } || '';
+}
+
+sub _expression_to_file {
+    my($self, $expression) = @_;
+
+    if($expression =~ /file="([^"]+)"/) {
+        return Path::Class::File->new(split '/', $1);
+    }
+    elsif($expression =~ /virtual="([^"]+)"/) {
+        return Path::Class::File->new($self->root, split '/', $1);
+    }
+
+    warn "Could not find file from SSI expression ($expression)" if DEBUG;
+    return;
+}
+
 #=============================================================================
 # INTERNAL FUNCTIONS
 

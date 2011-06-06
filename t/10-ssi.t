@@ -5,7 +5,7 @@ use Test::More;
 use Plack::App::File::SSI;
 
 plan skip_all => 'no test files' unless -d 't/file';
-plan tests => 18;
+plan tests => 23;
 
 my $file = Plack::App::File::SSI->new(root => 't/file');
 my($res, %data);
@@ -41,6 +41,15 @@ my($res, %data);
 
     $res = $file->_parse_ssi_expression('echo var="foo"', dummy_filehandle(), {});
     is($res->[0], '', 'SSI echo: return empty string');
+
+    $res = $file->_parse_ssi_expression('fsize file="t/file/readline.txt"', dummy_filehandle(), {});
+    is($res->[0], 23, 'SSI fsize: return 23');
+}
+
+SKIP: {
+    skip 'cannot execute "ls"', 1 if system 'ls >/dev/null';
+    $res = $file->_parse_ssi_expression('exec cmd="ls"', dummy_filehandle(), {});
+    like($res->[0], qr{\w}, 'SSI cmd: return directory list');
 }
 
 {
