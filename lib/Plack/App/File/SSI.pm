@@ -21,6 +21,7 @@ use Path::Class::File;
 use HTTP::Date;
 use base 'Plack::App::File';
 use constant DEBUG => $ENV{'PLACK_SSI_TRACE'} ? 1 : 0;
+use constant EVAL => 'Plack::App::File::SSI::__ANON__';
 
 my $SSI_EXPRESSION_START = qr{<!--\#};
 my $SSI_EXPRESSION_END = qr{-->};
@@ -218,14 +219,20 @@ sub _ssi_exp_include {
 
 sub _ssi_exp_if {
     my($self, $buf, $FH, $ssi_variables) = @_;
-    my($end_of_expression, $after_expression, $value);
+    my($end_of_expression, $after_expression, $expression);
     my $value = '';
 
     until($end_of_expression = __find_and_replace(\$buf, $SSI_ENDIF)) {
-        __readline(\$buf, $FH) or return ['', $buf];
+        __readline(\$buf, $FH) or return '', $buf;
     }
 
     $after_expression = substr $buf, $end_of_expression;
+    $expression = ($buf =~ /expr="([^"]+)"/)[0];
+
+    unless(defined $expression) {
+        warn "Found SSI if expression, but no expression ($buf)" if DEBUG;
+        return '', $after_expression;
+    }
 
     # TODO: Add support for
     # <!--#if expr="${Sec_Nav}" -->
@@ -235,6 +242,10 @@ sub _ssi_exp_if {
     # <!--#else -->
     # <!--#include virtual="article.txt" -->
     # <!--#endif -->
+
+    warn $buf;
+    warn $expression;
+    warn $after_expression;
 
     return $value, $after_expression;
 }
@@ -280,5 +291,35 @@ it under the same terms as Perl itself.
 Jan Henning Thorsen C<< jhthorsen at cpan.org >>
 
 =cut
+
+
+package # hide from CPAN
+    Plack::App::File::SSI::__ANON__;
+
+my $pkg = __PACKAGE__;
+
+sub __eval_expr {
+    my($class, $expression, $ssi_variables) = @_;
+
+    no strict;
+
+    CLEAR_VAR:
+    for my $key (keys %{"$pkg\::"}) {
+        next if($key eq '__eval_expr');
+        next if($key eq 'BEGIN');
+        delete ${"$pkg\::"}{$key};
+    }
+
+    ADD_VAR:
+    for my $key (keys %$ssi_variables) {
+        next if($key eq '__eval_expr');
+        next if($key eq 'BEGIN');
+        *{"$pkg\::$key"} = \$ssi_variables->{$key};
+    }
+
+    warn "eval ($expression)" if Plack::App::File::SSI::DEBUG;
+
+    return eval $expression;
+}
 
 1;

@@ -5,7 +5,7 @@ use Test::More;
 use Plack::App::File::SSI;
 
 plan skip_all => 'no test files' unless -d 't/file';
-plan tests => 32;
+plan tests => 37;
 
 my $file = Plack::App::File::SSI->new(root => 't/file');
 my($res, %data);
@@ -19,6 +19,19 @@ my($res, %data);
     Plack::App::File::SSI::__readline(\$buf, $FH); # second line...
     ok(!Plack::App::File::SSI::__readline(\$buf, $FH), '__readline() return false after second line');
     is(length($buf), 23, 'all data is read');
+}
+
+{
+    is(
+        Plack::App::File::SSI::__ANON__->__eval_expr('$foo', { foo => 123 }),
+        123,
+        'eval foo to 123'
+    );
+
+    no strict 'refs';
+    is(${"Plack::App::File::SSI::__ANON__::foo"}, 123, 'foo variable is part of __ANON__ package');
+    Plack::App::File::SSI::__ANON__->__eval_expr('1', { bar => 123 }),
+    is(${"Plack::App::File::SSI::__ANON__::foo"}, undef, 'foo variable is removed from __ANON__ package');
 }
 
 {
@@ -54,16 +67,10 @@ my($res, %data);
 
 TODO: {
     local $TODO = 'cannot parse if/else yet';
-    $res = $file->_parse_ssi_expression(q(if expr="${Sec_Nav}" -->
-               <!--#include virtual="bar.txt" -->
-               <!--#elif expr="${Pri_Nav}" -->
-               <!--#include virtual="foo.txt" -->
-               <!--#else -->
-               <!--#include virtual="article.txt" -->
-               <!--#endif -->
-            ), dummy_filehandle(), {});
+    $res = $file->_parse_ssi_expression('if expr="$FOO"', elif_else_filehandle(), {});
 
     is($res->[0], '', 'SSI if/elif/else ...');
+    is($res->[1], 'some text', 'SSI if/elif/else ...');
 }
 
 SKIP: {
@@ -109,6 +116,22 @@ SKIP: {
 
 sub dummy_filehandle {
     my $buf = shift || "-->after";
+    open my $FH, '<', \$buf;
+    return $FH;
+}
+
+sub elif_else_filehandle {
+    my $buf = <<'IF_ELIF_ELSE';
+-->
+FOO
+<!--#elif expr="${BAR}" -->
+BAR
+<!--#else -->
+ELSE
+<!--#endif -->
+after
+IF_ELIF_ELSE
+
     open my $FH, '<', \$buf;
     return $FH;
 }
