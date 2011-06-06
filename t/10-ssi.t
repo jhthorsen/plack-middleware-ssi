@@ -52,6 +52,20 @@ my($res, %data);
     is($res->[0], "first line\nsecond line\n", 'SSI include: return readline.txt');
 }
 
+TODO: {
+    local $TODO = 'cannot parse if/else yet';
+    $res = $file->_parse_ssi_expression(q(if expr="${Sec_Nav}" -->
+               <!--#include virtual="bar.txt" -->
+               <!--#elif expr="${Pri_Nav}" -->
+               <!--#include virtual="foo.txt" -->
+               <!--#else -->
+               <!--#include virtual="article.txt" -->
+               <!--#endif -->
+            ), dummy_filehandle(), {});
+
+    is($res->[0], '', 'SSI if/elif/else ...');
+}
+
 SKIP: {
     skip 'cannot execute "ls"', 1 if system 'ls >/dev/null';
     $res = $file->_parse_ssi_expression('exec cmd="ls"', dummy_filehandle(), {});

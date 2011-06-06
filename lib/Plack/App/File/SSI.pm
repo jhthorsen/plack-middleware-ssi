@@ -24,6 +24,7 @@ use constant DEBUG => $ENV{'PLACK_SSI_TRACE'} ? 1 : 0;
 
 my $SSI_EXPRESSION_START = qr{<!--\#};
 my $SSI_EXPRESSION_END = qr{-->};
+my $SSI_ENDIF = qr{<!--\#endif\s*-->};
 
 =head1 METHODS
 
@@ -139,7 +140,9 @@ sub _parse_ssi_expression {
         my $expression = substr $buf, 0, $end_of_expression;
 
         if($self->can($method)) {
-            $value = $self->$method($expression, $FH, $ssi_variables);
+            my @res = $self->$method($expression, $FH, $ssi_variables);
+            $value = $res[0];
+            $after_expression = $res[1] .$after_expression if(defined $res[1]);
         }
         else {
             $value = '<!-- unknown ssi method -->';
@@ -211,6 +214,29 @@ sub _ssi_exp_include {
     my($self, $expression, $FH, $ssi_variables) = @_;
     my $file = $self->_expression_to_file($expression) or return '';
     return $self->_parse_ssi_file("$file", $ssi_variables);
+}
+
+sub _ssi_exp_if {
+    my($self, $buf, $FH, $ssi_variables) = @_;
+    my($end_of_expression, $after_expression, $value);
+    my $value = '';
+
+    until($end_of_expression = __find_and_replace(\$buf, $SSI_ENDIF)) {
+        __readline(\$buf, $FH) or return ['', $buf];
+    }
+
+    $after_expression = substr $buf, $end_of_expression;
+
+    # TODO: Add support for
+    # <!--#if expr="${Sec_Nav}" -->
+    # <!--#include virtual="bar.txt" -->
+    # <!--#elif expr="${Pri_Nav}" -->
+    # <!--#include virtual="foo.txt" -->
+    # <!--#else -->
+    # <!--#include virtual="article.txt" -->
+    # <!--#endif -->
+
+    return $value, $after_expression;
 }
 
 sub _expression_to_file {
