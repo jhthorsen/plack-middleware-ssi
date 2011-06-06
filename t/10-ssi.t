@@ -5,10 +5,10 @@ use Test::More;
 use Plack::App::File::SSI;
 
 plan skip_all => 'no test files' unless -d 't/file';
-plan tests => 12;
+plan tests => 18;
 
-my $file = Plack::App::File::SSI->new;
-my $res;
+my $file = Plack::App::File::SSI->new(root => 't/file');
+my($res, %data);
 
 {
     open my $FH, '<', 't/file/readline.txt';
@@ -22,6 +22,28 @@ my $res;
 }
 
 {
+    $res = $file->_parse_ssi_expression('%&]', dummy_filehandle(), \%data);
+    is($res->[0], '<!-- unknown ssi expression -->', 'SSI unknown expression: return comment');
+    $res = $file->_parse_ssi_expression('invalid expression', dummy_filehandle(), \%data);
+    is($res->[0], '<!-- unknown ssi method -->', 'SSI invalid expression: return comment');
+    is($res->[1], 'after', 'SSI invalid expression: got remaining buffer');
+}
+
+{
+    $res = $file->_parse_ssi_expression('set var="foo" value="123"', dummy_filehandle(), \%data);
+    is($res->[0], '', 'SSI set: will not result in any value');
+    is($res->[1], 'after', 'SSI set: got remaining buffer');
+    is($data{'foo'}, 123, 'SSI set: variable foo was found in expression');
+
+    $res = $file->_parse_ssi_expression('echo var="foo"', dummy_filehandle(), { foo => 123 });
+    is($res->[0], '123', 'SSI echo: return 123');
+    is($res->[1], 'after', 'SSI echo: got remaining buffer');
+
+    $res = $file->_parse_ssi_expression('echo var="foo"', dummy_filehandle(), {});
+    is($res->[0], '', 'SSI echo: return empty string');
+}
+
+{
     $res = $file->serve_path({}, 't/file/folder.png');
     isa_ok($res->[2], 'Plack::Util::IOWithPath');
 
@@ -32,11 +54,12 @@ my $res;
     ok(1 == grep({ $_ eq 'Content-Length' } @{ $res->[1] }), '..and with Content-Lenght');
     ok(1 == grep({ $_ eq 'Last-Modified' } @{ $res->[1] }), '..and with Last-Modified');
 
-    like($res->[2][0], qr{^<!DOCTYPE HTML}, 'parsed result contain beginning');
+    like($res->[2][0], qr{^<!DOCTYPE HTML}, 'parsed result contain beginning...');
     like($res->[2][0], qr{</html>$}, '..and end of html file');
-
-    TODO: {
-        local $TODO = '_parse_ssi_file()';
-    }
 }
 
+sub dummy_filehandle {
+    my $buf = shift || "-->after";
+    open my $FH, '<', \$buf;
+    return $FH;
+}

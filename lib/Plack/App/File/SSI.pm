@@ -20,6 +20,7 @@ use warnings;
 use Path::Class::File;
 use HTTP::Date;
 use base 'Plack::App::File';
+use constant DEBUG => $ENV{'PLACK_SSI_TRACE'} ? 1 : 0;
 
 my $SSI_EXPRESSION_START = qr{<!--\#};
 my $SSI_EXPRESSION_END = qr{-->};
@@ -102,7 +103,7 @@ sub _parse_ssi_file {
 }
 
 sub _parse_ssi_expression {
-    my($self, $buf, $FH, $args) = @_;
+    my($self, $buf, $FH, $ssi_variables) = @_;
     my($end_of_expression, $after_expression, $value);
 
     until($end_of_expression = __find_and_replace(\$buf, $SSI_EXPRESSION_END)) {
@@ -111,8 +112,59 @@ sub _parse_ssi_expression {
 
     $after_expression = substr $buf, $end_of_expression;
 
-    return ['', $after_expression];
+    if($buf =~ s/^\s*(\w+)//) {
+        my $method = "_ssi_exp_$1";
+        my $expression = substr $buf, 0, $end_of_expression;
+
+        if($self->can($method)) {
+            $value = $self->$method($expression, $FH, $ssi_variables);
+        }
+        else {
+            $value = '<!-- unknown ssi method -->';
+        }
+    }
+
+    if(!defined $value) {
+        $value = '<!-- unknown ssi expression -->';
+    }
+
+    return [
+        $value,
+        $after_expression,
+    ];
 }
+
+sub _ssi_exp_set {
+    my($self, $expression, $FH, $ssi_variables) = @_;
+    my $name = $expression =~ /var="([^"]+)"/ ? $1 : undef;
+    my $value = $expression =~ /value="([^"]+)"/ ? $1 : '';
+
+    if(defined $name) {
+        $ssi_variables->{$name} = $value;
+    }
+    else {
+        warn "Found SSI set expression, but no variable name ($expression)" if DEBUG;
+    }
+
+    return '';
+}
+
+sub _ssi_exp_echo {
+    my($self, $expression, $FH, $ssi_variables) = @_;
+    my($name) = $expression =~ /var="([^"]+)"/ ? $1 : undef;
+
+    # TODO: echo DATE_LOCAL and friends
+
+    if(defined $name) {
+        return $ssi_variables->{$name} || '';
+    }
+
+    warn "Found SSI echo expression, but no variable name ($expression)" if DEBUG;
+    return '';
+}
+
+#=============================================================================
+# INTERNAL FUNCTIONS
 
 sub __readline {
     my($buf, $FH) = @_;
