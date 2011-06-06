@@ -5,7 +5,7 @@ use Test::More;
 use Plack::App::File::SSI;
 
 plan skip_all => 'no test files' unless -d 't/file';
-plan tests => 25;
+plan tests => 32;
 
 my $file = Plack::App::File::SSI->new(root => 't/file');
 my($res, %data);
@@ -59,6 +59,25 @@ SKIP: {
 }
 
 {
+    my $vars = $file->_default_ssi_variables({
+                   file => 't/file/readline.txt',
+                   REQUEST_URI => 'http://foo.com/bar.html',
+                   QUERY_STRING => 'a=42&b=24',
+               });
+
+    {
+        local $TODO = 'not sure how to get gmtime...';
+        like($vars->{'DATE_GMT'}, qr{\d}, "_default_ssi_variables has DATE_GMT $vars->{'DATE_GMT'}");
+    }
+
+    like($vars->{'DATE_LOCAL'}, qr{\d}, "_default_ssi_variables has DATE_LOCAL $vars->{'DATE_LOCAL'}");
+    is($vars->{'DOCUMENT_NAME'}, 't/file/readline.txt', '_default_ssi_variables has DOCUMENT_NAME');
+    is($vars->{'DOCUMENT_URI'}, 'http://foo.com/bar.html', '_default_ssi_variables has DOCUMENT_URI');
+    like($vars->{'LAST_MODIFIED'}, qr{\d}, "_default_ssi_variables has LAST_MODIFIED $vars->{'LAST_MODIFIED'}");
+    is($vars->{'QUERY_STRING_UNESCAPED'}, 'a=42&b=24', '_default_ssi_variables has QUERY_STRING_UNESCAPED');
+}
+
+{
     $res = $file->serve_path({}, 't/file/folder.png');
     isa_ok($res->[2], 'Plack::Util::IOWithPath');
 
@@ -71,6 +90,7 @@ SKIP: {
 
     like($res->[2][0], qr{^<!DOCTYPE HTML}, 'parsed result contain beginning...');
     like($res->[2][0], qr{</html>$}, '..and end of html file');
+    like($res->[2][0], qr{DOCUMENT_NAME=t/file/index.html}, 'index.html contains DOCUMENT_NAME');
 }
 
 sub dummy_filehandle {

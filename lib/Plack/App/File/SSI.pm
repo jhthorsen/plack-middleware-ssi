@@ -56,9 +56,16 @@ Will parse the file and search for SSI statements.
 sub serve_ssi {
     my($self, $env, $file) = @_;
     my @stat = stat $file;
+    my $ssi_variables;
 
     unless(@stat and -r $file) {
         return $self->return_403;
+    }
+
+    {
+        local $env->{'file'} = $file;
+        local $env->{'stat'} = \@stat;
+        $ssi_variables = $self->_default_ssi_variables($env);
     }
 
     return [
@@ -69,10 +76,25 @@ sub serve_ssi {
             'Last-Modified' => HTTP::Date::time2str($stat[9]),
         ],
         [
-            $self->_parse_ssi_file($file, {}),
+            $self->_parse_ssi_file($file, $ssi_variables),
         ],
     ];
 
+}
+
+sub _default_ssi_variables {
+    my($self, $args) = @_;
+
+    $args->{'stat'} ||= [stat $args->{'file'}];
+
+    return {
+        DATE_GMT => '', #HTTP::Date::time2str(...),
+        DATE_LOCAL => HTTP::Date::time2str(time),
+        DOCUMENT_NAME => $args->{'file'},
+        DOCUMENT_URI => $args->{'REQUEST_URI'} || '',
+        LAST_MODIFIED => HTTP::Date::time2str($args->{'stat'}[9]),
+        QUERY_STRING_UNESCAPED => $args->{'QUERY_STRING'} || '',
+    };
 }
 
 sub _parse_ssi_file {
@@ -152,8 +174,6 @@ sub _ssi_exp_set {
 sub _ssi_exp_echo {
     my($self, $expression, $FH, $ssi_variables) = @_;
     my($name) = $expression =~ /var="([^"]+)"/ ? $1 : undef;
-
-    # TODO: echo DATE_LOCAL and friends
 
     if(defined $name) {
         return $ssi_variables->{$name} || '';
