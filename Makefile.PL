@@ -7,7 +7,6 @@ requires q(HTTP::Date) => 5.831;
 requires q(Path::Class::File) => 0.23;
 requires q(Plack) => 0.99;
 
-test_requires q(Plack::App::File) => -1, set by base.pm;
 test_requires q(Test::More) => 0.98;
 
 bugtracker q(http://rt.cpan.org/NoAuth/Bugs.html?Dist=Plack-App-File-SSI);

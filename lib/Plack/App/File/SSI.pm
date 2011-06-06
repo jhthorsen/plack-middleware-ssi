@@ -21,6 +21,9 @@ use Path::Class::File;
 use HTTP::Date;
 use base 'Plack::App::File';
 
+my $SSI_EXPRESSION_START = qr{<!--\#};
+my $SSI_EXPRESSION_END = qr{-->};
+
 =head1 METHODS
 
 =head2 serve_path
@@ -72,7 +75,57 @@ sub serve_ssi {
 }
 
 sub _parse_ssi_file {
-    return 'TODO';
+    my($self, $file, $ssi_variables) = @_;
+    my($comment, $buf);
+    my $text = '';
+
+    open my $FH, '<:raw', $file or return $self->return_403;
+    $buf = readline $FH;
+
+    while(defined $buf) {
+        if(my $pos = __find_and_replace(\$buf, $SSI_EXPRESSION_START)) {
+            my $before_expression = substr $buf, 0, $pos;
+            my $expression = substr $buf, $pos;
+            my $value_buf = $self->_parse_ssi_expression($expression, $FH, {%$ssi_variables});
+
+            $text .= $before_expression;
+            $text .= $value_buf->[0];
+            $buf = $value_buf->[1];
+        }
+        else {
+            $text .= $buf;
+            $buf = readline $FH;
+        }
+    }
+
+    return $text;
+}
+
+sub _parse_ssi_expression {
+    my($self, $buf, $FH, $args) = @_;
+    my($end_of_expression, $after_expression, $value);
+
+    until($end_of_expression = __find_and_replace(\$buf, $SSI_EXPRESSION_END)) {
+        __readline(\$buf, $FH) or return ['', $buf];
+    }
+
+    $after_expression = substr $buf, $end_of_expression;
+
+    return ['', $after_expression];
+}
+
+sub __readline {
+    my($buf, $FH) = @_;
+    my $tmp = readline $FH;
+    return unless(defined $tmp);
+    $$buf .= $tmp;
+    return 1;
+}
+
+sub __find_and_replace {
+    my($buf, $re) = @_;
+    return $-[0] || '0e0' if($$buf =~ s/$re//);
+    return;
 }
 
 =head1 COPYRIGHT & LICENSE
