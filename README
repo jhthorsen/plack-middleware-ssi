@@ -1,0 +1,19 @@
+NAME
+    Plack::App::File::SSI - Extension of Plack::App::File to serve SSI
+
+DESCRIPTION
+    Will try to handle HTML server side include files as well as doing what
+    Plack::App::File does for "regular files".
+
+SYNOPSIS
+    See Plack::App::File.
+
+METHODS
+  serve_path
+COPYRIGHT & LICENSE
+    This library is free software. You can redistribute it and/or modify it
+    under the same terms as Perl itself.
+
+AUTHOR
+    Jan Henning Thorsen "jhthorsen at cpan.org"
+
