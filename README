@@ -10,6 +10,14 @@ SYNOPSIS
 
 METHODS
   serve_path
+    Will do the same as "serve_path" in Plack::App::File, unless for files
+    with mimetype "text/html": Will use "serve_ssi" then.
+
+  serve_ssi
+        [$status, $headers, [$text]] = $self->serve_ssi($file);
+
+    Will parse the file and search for SSI statements.
+
 COPYRIGHT & LICENSE
     This library is free software. You can redistribute it and/or modify it
     under the same terms as Perl itself.
