@@ -6,8 +6,39 @@ Plack::App::File::SSI - Extension of Plack::App::File to serve SSI
 
 =head1 DESCRIPTION
 
-Will try to handle HTML server side include files as well as doing
+Will try to handle HTML with server side include directives as well as doing
 what L<Plack::App::File> does for "regular files".
+
+=head1 SUPPORTED SSI DIRECTIVES
+
+See L<http://httpd.apache.org/docs/2.0/mod/mod_include.html>,
+L<http://httpd.apache.org/docs/2.0/howto/ssi.html> or
+L<http://en.wikipedia.org/wiki/Server_Side_Includes> for more details.
+
+=head2 set
+
+    <!--#set var="SOME_VAR" value="123" -->
+
+=head2 echo
+
+    <!--#echo var="SOME_VAR" -->
+
+=head2 exec
+
+    <!--#exec cmd="ls -l" -->
+
+=head2 flastmod
+
+    <!--#flastmod virtual="index.html" -->
+
+=head2 fsize
+
+    <!--#fsize file="script.pl" -->
+
+=head2 include
+
+    <!--#include virtual="relative/to/root.txt" -->
+    <!--#include file="/path/to/file/on/disk.txt" -->
 
 =head1 SYNOPSIS
 
@@ -67,7 +98,7 @@ sub serve_ssi {
     {
         local $env->{'file'} = $file;
         local $env->{'stat'} = \@stat;
-        $ssi_variables = $self->_default_ssi_variables($env);
+        $ssi_variables = $self->default_ssi_variables($env);
     }
 
     return [
@@ -84,13 +115,35 @@ sub serve_ssi {
 
 }
 
-sub _default_ssi_variables {
+=head2 default_ssi_variables
+
+Returns a hash-ref with default SSI variables which can be used inside
+
+    <!--#echo var="..." -->
+
+=over 4
+
+=item DATE_LOCAL
+
+=item DOCUMENT_NAME
+
+=item DOCUMENT_URI
+
+=item LAST_MODIFIED
+
+=item QUERY_STRING_UNESCAPED
+
+=back
+
+=cut
+
+sub default_ssi_variables {
     my($self, $args) = @_;
 
     $args->{'stat'} ||= [stat $args->{'file'}];
 
     return {
-        DATE_GMT => '', #HTTP::Date::time2str(...),
+        #DATE_GMT => HTTP::Date::time2str(...), <-- TODO
         DATE_LOCAL => HTTP::Date::time2str(time),
         DOCUMENT_NAME => $args->{'file'},
         DOCUMENT_URI => $args->{'REQUEST_URI'} || '',
@@ -159,6 +212,9 @@ sub _parse_ssi_expression {
         $after_expression,
     ];
 }
+
+#=============================================================================
+# SSI expression parsers
 
 sub _ssi_exp_set {
     my($self, $expression, $FH, $ssi_variables) = @_;
