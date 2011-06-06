@@ -178,8 +178,19 @@ sub _ssi_exp_exec {
 sub _ssi_exp_fsize {
     my($self, $expression, $FH, $ssi_variables) = @_;
     my $file = $self->_expression_to_file($expression) or return '';
-
     return eval { $file->stat->size } || '';
+}
+
+sub _ssi_exp_flastmod {
+    my($self, $expression, $FH, $ssi_variables) = @_;
+    my $file = $self->_expression_to_file($expression) or return '';
+    return eval { HTTP::Date::time2str($file->stat->mtime) } || '';
+}
+
+sub _ssi_exp_include {
+    my($self, $expression, $FH, $ssi_variables) = @_;
+    my $file = $self->_expression_to_file($expression) or return '';
+    return $self->_parse_ssi_file("$file", $ssi_variables);
 }
 
 sub _expression_to_file {

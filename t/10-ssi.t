@@ -5,7 +5,7 @@ use Test::More;
 use Plack::App::File::SSI;
 
 plan skip_all => 'no test files' unless -d 't/file';
-plan tests => 23;
+plan tests => 25;
 
 my $file = Plack::App::File::SSI->new(root => 't/file');
 my($res, %data);
@@ -44,6 +44,12 @@ my($res, %data);
 
     $res = $file->_parse_ssi_expression('fsize file="t/file/readline.txt"', dummy_filehandle(), {});
     is($res->[0], 23, 'SSI fsize: return 23');
+
+    $res = $file->_parse_ssi_expression('flastmod file="t/file/readline.txt"', dummy_filehandle(), {});
+    like($res->[0], qr{GMT$}, 'SSI flastmod: return time string');
+
+    $res = $file->_parse_ssi_expression('include virtual="readline.txt"', dummy_filehandle(), {});
+    is($res->[0], "first line\nsecond line\n", 'SSI include: return readline.txt');
 }
 
 SKIP: {
