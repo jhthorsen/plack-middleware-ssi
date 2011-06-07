@@ -40,6 +40,19 @@ L<http://en.wikipedia.org/wiki/Server_Side_Includes> for more details.
     <!--#include virtual="relative/to/root.txt" -->
     <!--#include file="/path/to/file/on/disk.txt" -->
 
+=head1 SUPPORTED SSI VARIABLES
+
+=head2 Standard variables
+
+DATE_GMT, DATE_LOCAL, DOCUMENT_NAME, DOCUMENT_URI, LAST_MODIFIED and
+QUERY_STRING_UNESCAPED.
+
+=head2 Extended by this module
+
+Any variable defined in L<Plack> C<$env> will be avaiable in the SSI
+document. Even so, it is not recommended to use any of those, since
+it may not be compatible with Apache and friends.
+
 =head1 SYNOPSIS
 
 See L<Plack::App::File>.
@@ -48,15 +61,20 @@ See L<Plack::App::File>.
 
 use strict;
 use warnings;
-use Path::Class::File;
 use HTTP::Date;
+use Path::Class::File;
+use POSIX ();
 use base 'Plack::App::File';
 use constant DEBUG => $ENV{'PLACK_SSI_TRACE'} ? 1 : 0;
 
 my $SSI_EXPRESSION_START = qr{<!--\#};
 my $SSI_EXPRESSION_END = qr{\s*-->};
+my $DEFAULT_ERRMSG = '[an error occurred while processing this directive]';
+my $DEFAULT_TIMEFMT = '%A, %d-%b-%Y %H:%M:%S %Z';
 my $ANON = 'Plack::App::File::SSI::__ANON__';
 my $SKIP = '__SKIP__' . rand 1000;
+my $CONFIG = '__config__' . rand 1000;
+my $FILE = '__file__' . rand 1000;
 
 =head1 METHODS
 
@@ -95,11 +113,13 @@ sub serve_ssi {
         return $self->return_403;
     }
 
-    {
-        local $env->{'file'} = $file;
-        local $env->{'stat'} = \@stat;
-        $ssi_variables = $self->default_ssi_variables($env);
-    }
+    $ssi_variables = {
+        %$env,
+        $FILE => Path::Class::File->new($file),
+        DOCUMENT_NAME => $file,
+        DOCUMENT_URI => $env->{'REQUEST_URI'} || '',
+        QUERY_STRING_UNESCAPED => $env->{'QUERY_STRING'} || '',
+    };
 
     open my $FH, '<:raw', $file or return $self->return_403;
 
@@ -116,50 +136,13 @@ sub serve_ssi {
     ];
 }
 
-=head2 default_ssi_variables
-
-Returns a hash-ref with default SSI variables which can be used inside
-
-    <!--#echo var="..." -->
-
-=over 4
-
-=item DATE_LOCAL
-
-=item DOCUMENT_NAME
-
-=item DOCUMENT_URI
-
-=item LAST_MODIFIED
-
-=item QUERY_STRING_UNESCAPED
-
-=back
-
-=cut
-
-sub default_ssi_variables {
-    my($self, $args) = @_;
-
-    $args->{'stat'} ||= [stat $args->{'file'}];
-
-    return {
-        #DATE_GMT => HTTP::Date::time2str(...), <-- TODO
-        DATE_LOCAL => HTTP::Date::time2str(time),
-        DOCUMENT_NAME => $args->{'file'},
-        DOCUMENT_URI => $args->{'REQUEST_URI'} || '',
-        LAST_MODIFIED => HTTP::Date::time2str($args->{'stat'}[9]),
-        QUERY_STRING_UNESCAPED => $args->{'QUERY_STRING'} || '',
-    };
-}
-
 =head2 parse_ssi_from_filehandle
 
     $text = $self->parse_ssi_from_filehandle($FH, \%variables);
 
 Will return the content from C<$FH> as a plain string, where all SSI
 directives are expanded. All expression which could not be expanded
-will be replaced with "<!-- unknown ssi expression -->".
+will be replaced with "[an error occurred while processing this directive]".
 
 =cut
 
@@ -185,7 +168,7 @@ sub parse_ssi_from_filehandle {
                 $value = $self->$method($expression, $ssi_variables);
             }
             else {
-                $value = '<!-- unknown ssi expression -->';
+                $value = $ssi_variables->{$CONFIG}{'errmsg'} || $DEFAULT_ERRMSG;
             }
 
             $text .= $value unless($ssi_variables->{$SKIP});
@@ -222,7 +205,7 @@ sub _ssi_exp_echo {
     my($name) = $expression =~ /var="([^"]+)"/ ? $1 : undef;
 
     if(defined $name) {
-        return $ssi_variables->{$name} || '';
+        return $ANON->__eval_condition("\$$name", $ssi_variables);
     }
 
     warn "Found SSI echo expression, but no variable name ($expression)" if DEBUG;
@@ -244,18 +227,25 @@ sub _ssi_exp_exec {
 sub _ssi_exp_fsize {
     my($self, $expression, $ssi_variables) = @_;
     my $file = $self->_expression_to_file($expression) or return '';
+
     return eval { $file->stat->size } || '';
 }
 
 sub _ssi_exp_flastmod {
     my($self, $expression, $ssi_variables) = @_;
     my $file = $self->_expression_to_file($expression) or return '';
-    return eval { HTTP::Date::time2str($file->stat->mtime) } || '';
+    my $fmt = $ssi_variables->{$CONFIG}{'timefmt'} || $DEFAULT_TIMEFMT;
+
+    return eval { POSIX::strftime($fmt, localtime $file->stat->mtime) } || '';
 }
 
 sub _ssi_exp_include {
     my($self, $expression, $ssi_variables) = @_;
     my $file = $self->_expression_to_file($expression) or return '';
+
+    local $ssi_variables->{'DOCUMENT_NAME'} = "$file";
+    local $ssi_variables->{$FILE} = $file;
+
     return $self->parse_ssi_from_filehandle($file->openr, $ssi_variables);
 }
 
@@ -345,6 +335,16 @@ sub __eval_condition {
     no strict;
 
     if($expression =~ /\$/) { # 1 is always true. do not need variables to figure that out
+        my $fmt = $ssi_variables->{$CONFIG}{'timefmt'} || $DEFAULT_TIMEFMT;
+        $ssi_variables->{"__{$fmt}__DATE_GMT"} ||= do { local $_ = POSIX::strftime($fmt, gmtime); s/\w+$/GMT/; $_ };
+        $ssi_variables->{"__{$fmt}__DATE_LOCAL"} ||= POSIX::strftime($fmt, localtime);
+        $ssi_variables->{'DATE_GMT'} = $ssi_variables->{"__{$fmt}__DATE_GMT"};
+        $ssi_variables->{'DATE_LOCAL'} = $ssi_variables->{"__{$fmt}__DATE_LOCAL"};
+
+        if(my $file = $ssi_variables->{$FILE}) {
+            $ssi_variables->{'LAST_MODIFIED'} = POSIX::strftime($fmt, localtime $file->stat->mtime);
+        }
+
         for my $key (keys %{"$pkg\::"}) {
             next if($key eq '__eval_condition');
             delete ${"$pkg\::"}{$key};
@@ -364,7 +364,7 @@ sub __eval_condition {
         warn $@;
     }
 
-    return 0;
+    return '';
 }
 
 1;

@@ -5,9 +5,10 @@ use Test::More;
 use Plack::App::File::SSI;
 
 plan skip_all => 'no test files' unless -d 't/file';
-plan tests => 32;
+plan tests => 31;
 
 my $file = Plack::App::File::SSI->new(root => 't/file');
+my $TIME_RE = qr{\w+, \d+-\w+-\d+ [\d:]+};
 my($res, %data);
 
 {
@@ -36,10 +37,8 @@ my($res, %data);
 
 {
     $res = $file->parse_ssi_from_filehandle(ssi_fh('invalid expression'), \%data);
-    is($res, 'B<!-- unknown ssi expression -->A', 'SSI invalid expression: return comment');
-}
+    is($res, 'B[an error occurred while processing this directive]A', 'SSI invalid expression: return comment');
 
-{
     $res = $file->parse_ssi_from_filehandle(ssi_fh('set var="foo" value="123"'), \%data);
     is($res, 'BA', 'SSI set: will not result in any value');
     is($data{'foo'}, 123, 'SSI set: variable foo was found in expression');
@@ -54,7 +53,7 @@ my($res, %data);
     is($res, "B23A", 'SSI fsize: return 23');
 
     $res = $file->parse_ssi_from_filehandle(ssi_fh('flastmod file="t/file/readline.txt"'), {});
-    like($res, qr{^B.*GMTA$}, 'SSI flastmod: return time string');
+    like($res, qr"^B$TIME_RE \w+A$", 'SSI flastmod: return time string');
 
     $res = $file->parse_ssi_from_filehandle(ssi_fh('include virtual="readline.txt"'), {});
     is($res, "Bfirst line\nsecond line\nA", 'SSI include: return readline.txt');
@@ -66,7 +65,6 @@ my($res, %data);
     $res = $file->parse_ssi_from_filehandle(if_elif_else_filehandle(), { A => 1 });
     is($res, "\nIF\nafter\n", 'SSI if/elif/else: IF');
 }
-exit;
 
 SKIP: {
     skip 'cannot execute "ls"', 1 if system 'ls >/dev/null';
@@ -75,28 +73,11 @@ SKIP: {
 }
 
 {
-    my $vars = $file->default_ssi_variables({
-                   file => 't/file/readline.txt',
-                   REQUEST_URI => 'http://foo.com/bar.html',
-                   QUERY_STRING => 'a=42&b=24',
-               });
-
-    {
-        local $TODO = 'not sure how to get gmtime...';
-        like($vars->{'DATE_GMT'}, qr{\d}, "default_ssi_variables has DATE_GMT $vars->{'DATE_GMT'}");
-    }
-
-    like($vars->{'DATE_LOCAL'}, qr{\d}, "default_ssi_variables has DATE_LOCAL $vars->{'DATE_LOCAL'}");
-    is($vars->{'DOCUMENT_NAME'}, 't/file/readline.txt', 'default_ssi_variables has DOCUMENT_NAME');
-    is($vars->{'DOCUMENT_URI'}, 'http://foo.com/bar.html', 'default_ssi_variables has DOCUMENT_URI');
-    like($vars->{'LAST_MODIFIED'}, qr{\d}, "default_ssi_variables has LAST_MODIFIED $vars->{'LAST_MODIFIED'}");
-    is($vars->{'QUERY_STRING_UNESCAPED'}, 'a=42&b=24', 'default_ssi_variables has QUERY_STRING_UNESCAPED');
+    $res = $file->serve_path({}, 't/file/folder.png');
+    isa_ok($res->[2], 'Plack::Util::IOWithPath');
 }
 
 {
-    $res = $file->serve_path({}, 't/file/folder.png');
-    isa_ok($res->[2], 'Plack::Util::IOWithPath');
-
     $res = $file->serve_path({}, 't/file/index.html');
     is(ref($res->[2]), 'ARRAY', 'HTML is served with serve_ssi()');
     is($res->[0], 200, '..and code 200');
@@ -107,6 +88,9 @@ SKIP: {
     like($res->[2][0], qr{^<!DOCTYPE HTML}, 'parsed result contain beginning...');
     like($res->[2][0], qr{</html>$}, '..and end of html file');
     like($res->[2][0], qr{DOCUMENT_NAME=t/file/index.html}, 'index.html contains DOCUMENT_NAME');
+    like($res->[2][0], qr{DATE_GMT=$TIME_RE GMT}, 'index.html contains DATE_GMT');
+    like($res->[2][0], qr{DATE_LOCAL=$TIME_RE \w+}, 'index.html contains DATE_LOCAL');
+    like($res->[2][0], qr{LAST_MODIFIED=$TIME_RE \w+}, 'index.html contains LAST_MODIFIED');
 }
 
 sub ssi_fh {

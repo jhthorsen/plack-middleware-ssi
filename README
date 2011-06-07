@@ -29,6 +29,16 @@ SUPPORTED SSI DIRECTIVES
         <!--#include virtual="relative/to/root.txt" -->
         <!--#include file="/path/to/file/on/disk.txt" -->
 
+SUPPORTED SSI VARIABLES
+  Standard variables
+    DATE_GMT, DATE_LOCAL, DOCUMENT_NAME, DOCUMENT_URI, LAST_MODIFIED and
+    QUERY_STRING_UNESCAPED.
+
+  Extended by this module
+    Any variable defined in Plack $env will be avaiable in the SSI document.
+    Even so, it is not recommended to use any of those, since it may not be
+    compatible with Apache and friends.
+
 SYNOPSIS
     See Plack::App::File.
 
@@ -38,20 +48,16 @@ METHODS
     with mimetype "text/html": Will use "serve_ssi" then.
 
   serve_ssi
-        [$status, $headers, [$text]] = $self->serve_ssi($file);
+        [$status, $headers, [$text]] = $self->serve_ssi($env, $file);
 
     Will parse the file and search for SSI statements.
 
-  default_ssi_variables
-    Returns a hash-ref with default SSI variables which can be used inside
+  parse_ssi_from_filehandle
+        $text = $self->parse_ssi_from_filehandle($FH, \%variables);
 
-        <!--#echo var="..." -->
-
-    DATE_LOCAL
-    DOCUMENT_NAME
-    DOCUMENT_URI
-    LAST_MODIFIED
-    QUERY_STRING_UNESCAPED
+    Will return the content from $FH as a plain string, where all SSI
+    directives are expanded. All expression which could not be expanded will
+    be replaced with "[an error occurred while processing this directive]".
 
 COPYRIGHT & LICENSE
     This library is free software. You can redistribute it and/or modify it
