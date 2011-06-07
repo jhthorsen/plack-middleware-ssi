@@ -2,8 +2,32 @@ NAME
     Plack::App::File::SSI - Extension of Plack::App::File to serve SSI
 
 DESCRIPTION
-    Will try to handle HTML server side include files as well as doing what
-    Plack::App::File does for "regular files".
+    Will try to handle HTML with server side include directives as well as
+    doing what Plack::App::File does for "regular files".
+
+SUPPORTED SSI DIRECTIVES
+    See <http://httpd.apache.org/docs/2.0/mod/mod_include.html>,
+    <http://httpd.apache.org/docs/2.0/howto/ssi.html> or
+    <http://en.wikipedia.org/wiki/Server_Side_Includes> for more details.
+
+  set
+        <!--#set var="SOME_VAR" value="123" -->
+
+  echo
+        <!--#echo var="SOME_VAR" -->
+
+  exec
+        <!--#exec cmd="ls -l" -->
+
+  flastmod
+        <!--#flastmod virtual="index.html" -->
+
+  fsize
+        <!--#fsize file="script.pl" -->
+
+  include
+        <!--#include virtual="relative/to/root.txt" -->
+        <!--#include file="/path/to/file/on/disk.txt" -->
 
 SYNOPSIS
     See Plack::App::File.
@@ -17,6 +41,17 @@ METHODS
         [$status, $headers, [$text]] = $self->serve_ssi($file);
 
     Will parse the file and search for SSI statements.
+
+  default_ssi_variables
+    Returns a hash-ref with default SSI variables which can be used inside
+
+        <!--#echo var="..." -->
+
+    DATE_LOCAL
+    DOCUMENT_NAME
+    DOCUMENT_URI
+    LAST_MODIFIED
+    QUERY_STRING_UNESCAPED
 
 COPYRIGHT & LICENSE
     This library is free software. You can redistribute it and/or modify it
