@@ -87,7 +87,7 @@ SKIP: {
 
     like($res->[2][0], qr{^<!DOCTYPE HTML}, 'parsed result contain beginning...');
     like($res->[2][0], qr{</html>$}, '..and end of html file');
-    like($res->[2][0], qr{DOCUMENT_NAME=t/file/index.html}, 'index.html contains DOCUMENT_NAME');
+    like($res->[2][0], qr{DOCUMENT_NAME=index.html}, 'index.html contains DOCUMENT_NAME');
     like($res->[2][0], qr{DATE_GMT=$TIME_RE GMT}, 'index.html contains DATE_GMT');
     like($res->[2][0], qr{DATE_LOCAL=$TIME_RE \w+}, 'index.html contains DATE_LOCAL');
     like($res->[2][0], qr{LAST_MODIFIED=$TIME_RE \w+}, 'index.html contains LAST_MODIFIED');

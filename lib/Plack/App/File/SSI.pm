@@ -61,6 +61,7 @@ See L<Plack::App::File>.
 
 use strict;
 use warnings;
+use File::Basename ();
 use HTTP::Date;
 use Path::Class::File;
 use POSIX ();
@@ -116,7 +117,7 @@ sub serve_ssi {
     $ssi_variables = {
         %$env,
         $FILE => Path::Class::File->new($file),
-        DOCUMENT_NAME => $file,
+        DOCUMENT_NAME => File::Basename::basename($file),
         DOCUMENT_URI => $env->{'REQUEST_URI'} || '',
         QUERY_STRING_UNESCAPED => $env->{'QUERY_STRING'} || '',
     };
@@ -243,7 +244,7 @@ sub _ssi_exp_include {
     my($self, $expression, $ssi_variables) = @_;
     my $file = $self->_expression_to_file($expression) or return '';
 
-    local $ssi_variables->{'DOCUMENT_NAME'} = "$file";
+    local $ssi_variables->{'DOCUMENT_NAME'} = $file->basename;
     local $ssi_variables->{$FILE} = $file;
 
     return $self->parse_ssi_from_filehandle($file->openr, $ssi_variables);
