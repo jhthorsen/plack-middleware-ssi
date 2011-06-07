@@ -52,11 +52,11 @@ use Path::Class::File;
 use HTTP::Date;
 use base 'Plack::App::File';
 use constant DEBUG => $ENV{'PLACK_SSI_TRACE'} ? 1 : 0;
-use constant EVAL => 'Plack::App::File::SSI::__ANON__';
 
 my $SSI_EXPRESSION_START = qr{<!--\#};
-my $SSI_EXPRESSION_END = qr{-->};
-my $SSI_ENDIF = qr{<!--\#endif\s*-->};
+my $SSI_EXPRESSION_END = qr{\s*-->};
+my $ANON = 'Plack::App::File::SSI::__ANON__';
+my $SKIP = '__SKIP__' . rand 1000;
 
 =head1 METHODS
 
@@ -80,7 +80,7 @@ sub serve_path {
 
 =head2 serve_ssi
 
-    [$status, $headers, [$text]] = $self->serve_ssi($file);
+    [$status, $headers, [$text]] = $self->serve_ssi($env, $file);
 
 Will parse the file and search for SSI statements.
 
@@ -101,6 +101,8 @@ sub serve_ssi {
         $ssi_variables = $self->default_ssi_variables($env);
     }
 
+    open my $FH, '<:raw', $file or return $self->return_403;
+
     return [
         200,
         [
@@ -109,10 +111,9 @@ sub serve_ssi {
             'Last-Modified' => HTTP::Date::time2str($stat[9]),
         ],
         [
-            $self->_parse_ssi_file($file, $ssi_variables),
+            $self->parse_ssi_from_filehandle($FH, $ssi_variables),
         ],
     ];
-
 }
 
 =head2 default_ssi_variables
@@ -152,26 +153,45 @@ sub default_ssi_variables {
     };
 }
 
-sub _parse_ssi_file {
-    my($self, $file, $ssi_variables) = @_;
-    my($comment, $buf);
-    my $text = '';
+=head2 parse_ssi_from_filehandle
 
-    open my $FH, '<:raw', $file or return $self->return_403;
-    $buf = readline $FH;
+    $text = $self->parse_ssi_from_filehandle($FH, \%variables);
+
+Will return the content from C<$FH> as a plain string, where all SSI
+directives are expanded. All expression which could not be expanded
+will be replaced with "<!-- unknown ssi expression -->".
+
+=cut
+
+sub parse_ssi_from_filehandle {
+    my($self, $FH, $ssi_variables) = @_;
+    my $buf = readline $FH;
+    my $text = '';
 
     while(defined $buf) {
         if(my $pos = __find_and_replace(\$buf, $SSI_EXPRESSION_START)) {
-            my $before_expression = substr $buf, 0, $pos;
-            my $expression = substr $buf, $pos;
-            my $value_buf = $self->_parse_ssi_expression($expression, $FH, {%$ssi_variables});
+            my($expression, $expression_end_pos, $method, $value);
 
-            $text .= $before_expression;
-            $text .= $value_buf->[0];
-            $buf = $value_buf->[1];
+            until($expression_end_pos = __find_and_replace(\$buf, $SSI_EXPRESSION_END)) {
+                __readline(\$buf, $FH) or last;
+            }
+
+            $text .= substr $buf, 0, $pos unless($ssi_variables->{$SKIP});
+            $expression = substr $buf, $pos, $expression_end_pos;
+            $buf = substr $buf, $expression_end_pos; # after expression
+            $method = $expression =~ s/^(\w+)// ? "_ssi_exp_$1" : '_ssi_exp_unknown';
+
+            if($self->can($method)) {
+                $value = $self->$method($expression, $ssi_variables);
+            }
+            else {
+                $value = '<!-- unknown ssi expression -->';
+            }
+
+            $text .= $value unless($ssi_variables->{$SKIP});
         }
         else {
-            $text .= $buf;
+            $text .= $buf unless($ssi_variables->{$SKIP});
             $buf = readline $FH;
         }
     }
@@ -179,45 +199,11 @@ sub _parse_ssi_file {
     return $text;
 }
 
-sub _parse_ssi_expression {
-    my($self, $buf, $FH, $ssi_variables) = @_;
-    my($end_of_expression, $after_expression, $value);
-
-    until($end_of_expression = __find_and_replace(\$buf, $SSI_EXPRESSION_END)) {
-        __readline(\$buf, $FH) or return ['', $buf];
-    }
-
-    $after_expression = substr $buf, $end_of_expression;
-
-    if($buf =~ s/^\s*(\w+)//) {
-        my $method = "_ssi_exp_$1";
-        my $expression = substr $buf, 0, $end_of_expression;
-
-        if($self->can($method)) {
-            my @res = $self->$method($expression, $FH, $ssi_variables);
-            $value = $res[0];
-            $after_expression = $res[1] .$after_expression if(defined $res[1]);
-        }
-        else {
-            $value = '<!-- unknown ssi method -->';
-        }
-    }
-
-    if(!defined $value) {
-        $value = '<!-- unknown ssi expression -->';
-    }
-
-    return [
-        $value,
-        $after_expression,
-    ];
-}
-
 #=============================================================================
 # SSI expression parsers
 
 sub _ssi_exp_set {
-    my($self, $expression, $FH, $ssi_variables) = @_;
+    my($self, $expression, $ssi_variables) = @_;
     my $name = $expression =~ /var="([^"]+)"/ ? $1 : undef;
     my $value = $expression =~ /value="([^"]+)"/ ? $1 : '';
 
@@ -232,7 +218,7 @@ sub _ssi_exp_set {
 }
 
 sub _ssi_exp_echo {
-    my($self, $expression, $FH, $ssi_variables) = @_;
+    my($self, $expression, $ssi_variables) = @_;
     my($name) = $expression =~ /var="([^"]+)"/ ? $1 : undef;
 
     if(defined $name) {
@@ -244,7 +230,7 @@ sub _ssi_exp_echo {
 }
 
 sub _ssi_exp_exec {
-    my($self, $expression, $FH, $ssi_variables) = @_;
+    my($self, $expression, $ssi_variables) = @_;
     my($cmd) = $expression =~ /cmd="([^"]+)"/ ? $1 : undef;
 
     if(defined $cmd) {
@@ -256,54 +242,53 @@ sub _ssi_exp_exec {
 }
 
 sub _ssi_exp_fsize {
-    my($self, $expression, $FH, $ssi_variables) = @_;
+    my($self, $expression, $ssi_variables) = @_;
     my $file = $self->_expression_to_file($expression) or return '';
     return eval { $file->stat->size } || '';
 }
 
 sub _ssi_exp_flastmod {
-    my($self, $expression, $FH, $ssi_variables) = @_;
+    my($self, $expression, $ssi_variables) = @_;
     my $file = $self->_expression_to_file($expression) or return '';
     return eval { HTTP::Date::time2str($file->stat->mtime) } || '';
 }
 
 sub _ssi_exp_include {
-    my($self, $expression, $FH, $ssi_variables) = @_;
+    my($self, $expression, $ssi_variables) = @_;
     my $file = $self->_expression_to_file($expression) or return '';
-    return $self->_parse_ssi_file("$file", $ssi_variables);
+    return $self->parse_ssi_from_filehandle($file->openr, $ssi_variables);
 }
 
-sub _ssi_exp_if {
-    my($self, $buf, $FH, $ssi_variables) = @_;
-    my($end_of_expression, $after_expression, $expression);
-    my $value = '';
+sub _ssi_exp_if { $_[0]->_evaluate_if_elif_else($_[1], $_[2]) }
+sub _ssi_exp_elif { $_[0]->_evaluate_if_elif_else($_[1], $_[2]) }
+sub _ssi_exp_else { $_[0]->_evaluate_if_elif_else('expr="1"', $_[2]) }
 
-    until($end_of_expression = __find_and_replace(\$buf, $SSI_ENDIF)) {
-        __readline(\$buf, $FH) or return '', $buf;
+sub _evaluate_if_elif_else {
+    my($self, $expression, $ssi_variables) = @_;
+    my $condition = $expression =~ /expr="([^"]+)"/ ? $1 : undef;
+
+    unless(defined $condition) {
+        warn "Found SSI if expression, but no expression ($expression)" if DEBUG;
+        return '';
     }
 
-    $after_expression = substr $buf, $end_of_expression;
-    $expression = ($buf =~ /expr="([^"]+)"/)[0];
-
-    unless(defined $expression) {
-        warn "Found SSI if expression, but no expression ($buf)" if DEBUG;
-        return '', $after_expression;
+    if(defined $ssi_variables->{$SKIP} and $ssi_variables->{$SKIP} != 1) {
+        $ssi_variables->{$SKIP} = 2; # previously true
+    }
+    elsif($ANON->__eval_condition($condition, $ssi_variables)) {
+        $ssi_variables->{$SKIP} = 0; # true
+    }
+    else {
+        $ssi_variables->{$SKIP} = 1; # false
     }
 
-    # TODO: Add support for
-    # <!--#if expr="${Sec_Nav}" -->
-    # <!--#include virtual="bar.txt" -->
-    # <!--#elif expr="${Pri_Nav}" -->
-    # <!--#include virtual="foo.txt" -->
-    # <!--#else -->
-    # <!--#include virtual="article.txt" -->
-    # <!--#endif -->
+    return '';
+}
 
-    warn $buf;
-    warn $expression;
-    warn $after_expression;
-
-    return $value, $after_expression;
+sub _ssi_exp_endif {
+    my($self, $expression, $ssi_variables) = @_;
+    delete $ssi_variables->{$SKIP};
+    return '';
 }
 
 sub _expression_to_file {
@@ -354,28 +339,32 @@ package # hide from CPAN
 
 my $pkg = __PACKAGE__;
 
-sub __eval_expr {
+sub __eval_condition {
     my($class, $expression, $ssi_variables) = @_;
 
     no strict;
 
-    CLEAR_VAR:
-    for my $key (keys %{"$pkg\::"}) {
-        next if($key eq '__eval_expr');
-        next if($key eq 'BEGIN');
-        delete ${"$pkg\::"}{$key};
-    }
-
-    ADD_VAR:
-    for my $key (keys %$ssi_variables) {
-        next if($key eq '__eval_expr');
-        next if($key eq 'BEGIN');
-        *{"$pkg\::$key"} = \$ssi_variables->{$key};
+    if($expression =~ /\$/) { # 1 is always true. do not need variables to figure that out
+        for my $key (keys %{"$pkg\::"}) {
+            next if($key eq '__eval_condition');
+            delete ${"$pkg\::"}{$key};
+        }
+        for my $key (keys %$ssi_variables) {
+            next if($key eq '__eval_condition');
+            *{"$pkg\::$key"} = \$ssi_variables->{$key};
+        }
     }
 
     warn "eval ($expression)" if Plack::App::File::SSI::DEBUG;
 
-    return eval $expression;
+    if(my $res = eval $expression) {
+        return $res;
+    }
+    if($@) {
+        warn $@;
+    }
+
+    return 0;
 }
 
 1;

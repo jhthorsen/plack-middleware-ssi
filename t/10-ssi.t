@@ -5,7 +5,7 @@ use Test::More;
 use Plack::App::File::SSI;
 
 plan skip_all => 'no test files' unless -d 't/file';
-plan tests => 37;
+plan tests => 32;
 
 my $file = Plack::App::File::SSI->new(root => 't/file');
 my($res, %data);
@@ -23,64 +23,59 @@ my($res, %data);
 
 {
     is(
-        Plack::App::File::SSI::__ANON__->__eval_expr('$foo', { foo => 123 }),
+        Plack::App::File::SSI::__ANON__->__eval_condition('$foo', { foo => 123 }),
         123,
         'eval foo to 123'
     );
 
     no strict 'refs';
     is(${"Plack::App::File::SSI::__ANON__::foo"}, 123, 'foo variable is part of __ANON__ package');
-    Plack::App::File::SSI::__ANON__->__eval_expr('1', { bar => 123 }),
+    Plack::App::File::SSI::__ANON__->__eval_condition('$bar', { bar => 123 }),
     is(${"Plack::App::File::SSI::__ANON__::foo"}, undef, 'foo variable is removed from __ANON__ package');
 }
 
 {
-    $res = $file->_parse_ssi_expression('%&]', dummy_filehandle(), \%data);
-    is($res->[0], '<!-- unknown ssi expression -->', 'SSI unknown expression: return comment');
-    $res = $file->_parse_ssi_expression('invalid expression', dummy_filehandle(), \%data);
-    is($res->[0], '<!-- unknown ssi method -->', 'SSI invalid expression: return comment');
-    is($res->[1], 'after', 'SSI invalid expression: got remaining buffer');
+    $res = $file->parse_ssi_from_filehandle(ssi_fh('invalid expression'), \%data);
+    is($res, 'B<!-- unknown ssi expression -->A', 'SSI invalid expression: return comment');
 }
 
 {
-    $res = $file->_parse_ssi_expression('set var="foo" value="123"', dummy_filehandle(), \%data);
-    is($res->[0], '', 'SSI set: will not result in any value');
-    is($res->[1], 'after', 'SSI set: got remaining buffer');
+    $res = $file->parse_ssi_from_filehandle(ssi_fh('set var="foo" value="123"'), \%data);
+    is($res, 'BA', 'SSI set: will not result in any value');
     is($data{'foo'}, 123, 'SSI set: variable foo was found in expression');
 
-    $res = $file->_parse_ssi_expression('echo var="foo"', dummy_filehandle(), { foo => 123 });
-    is($res->[0], '123', 'SSI echo: return 123');
-    is($res->[1], 'after', 'SSI echo: got remaining buffer');
+    $res = $file->parse_ssi_from_filehandle(ssi_fh('echo var="foo"'), { foo => 123 });
+    is($res, 'B123A', 'SSI echo: return 123');
 
-    $res = $file->_parse_ssi_expression('echo var="foo"', dummy_filehandle(), {});
-    is($res->[0], '', 'SSI echo: return empty string');
+    $res = $file->parse_ssi_from_filehandle(ssi_fh('echo var="foo"'), {});
+    is($res, 'BA', 'SSI echo: return empty string');
 
-    $res = $file->_parse_ssi_expression('fsize file="t/file/readline.txt"', dummy_filehandle(), {});
-    is($res->[0], 23, 'SSI fsize: return 23');
+    $res = $file->parse_ssi_from_filehandle(ssi_fh('fsize file="t/file/readline.txt"'), {});
+    is($res, "B23A", 'SSI fsize: return 23');
 
-    $res = $file->_parse_ssi_expression('flastmod file="t/file/readline.txt"', dummy_filehandle(), {});
-    like($res->[0], qr{GMT$}, 'SSI flastmod: return time string');
+    $res = $file->parse_ssi_from_filehandle(ssi_fh('flastmod file="t/file/readline.txt"'), {});
+    like($res, qr{^B.*GMTA$}, 'SSI flastmod: return time string');
 
-    $res = $file->_parse_ssi_expression('include virtual="readline.txt"', dummy_filehandle(), {});
-    is($res->[0], "first line\nsecond line\n", 'SSI include: return readline.txt');
+    $res = $file->parse_ssi_from_filehandle(ssi_fh('include virtual="readline.txt"'), {});
+    is($res, "Bfirst line\nsecond line\nA", 'SSI include: return readline.txt');
+
+    $res = $file->parse_ssi_from_filehandle(if_elif_else_filehandle(), { FOO => 42 });
+    is($res, "\nELSE\nafter\n", 'SSI if/elif/else: ELSE');
+    $res = $file->parse_ssi_from_filehandle(if_elif_else_filehandle(), { B => 2 });
+    is($res, "\nELIF\nafter\n", 'SSI if/elif/else: ELIF');
+    $res = $file->parse_ssi_from_filehandle(if_elif_else_filehandle(), { A => 1 });
+    is($res, "\nIF\nafter\n", 'SSI if/elif/else: IF');
 }
-
-TODO: {
-    local $TODO = 'cannot parse if/else yet';
-    $res = $file->_parse_ssi_expression('if expr="$FOO"', elif_else_filehandle(), {});
-
-    is($res->[0], '', 'SSI if/elif/else ...');
-    is($res->[1], 'some text', 'SSI if/elif/else ...');
-}
+exit;
 
 SKIP: {
     skip 'cannot execute "ls"', 1 if system 'ls >/dev/null';
-    $res = $file->_parse_ssi_expression('exec cmd="ls"', dummy_filehandle(), {});
-    like($res->[0], qr{\w}, 'SSI cmd: return directory list');
+    $res = $file->parse_ssi_from_filehandle(ssi_fh('exec cmd="ls"'), {});
+    like($res, qr{\w}, 'SSI cmd: return directory list');
 }
 
 {
-    my $vars = $file->_default_ssi_variables({
+    my $vars = $file->default_ssi_variables({
                    file => 't/file/readline.txt',
                    REQUEST_URI => 'http://foo.com/bar.html',
                    QUERY_STRING => 'a=42&b=24',
@@ -88,14 +83,14 @@ SKIP: {
 
     {
         local $TODO = 'not sure how to get gmtime...';
-        like($vars->{'DATE_GMT'}, qr{\d}, "_default_ssi_variables has DATE_GMT $vars->{'DATE_GMT'}");
+        like($vars->{'DATE_GMT'}, qr{\d}, "default_ssi_variables has DATE_GMT $vars->{'DATE_GMT'}");
     }
 
-    like($vars->{'DATE_LOCAL'}, qr{\d}, "_default_ssi_variables has DATE_LOCAL $vars->{'DATE_LOCAL'}");
-    is($vars->{'DOCUMENT_NAME'}, 't/file/readline.txt', '_default_ssi_variables has DOCUMENT_NAME');
-    is($vars->{'DOCUMENT_URI'}, 'http://foo.com/bar.html', '_default_ssi_variables has DOCUMENT_URI');
-    like($vars->{'LAST_MODIFIED'}, qr{\d}, "_default_ssi_variables has LAST_MODIFIED $vars->{'LAST_MODIFIED'}");
-    is($vars->{'QUERY_STRING_UNESCAPED'}, 'a=42&b=24', '_default_ssi_variables has QUERY_STRING_UNESCAPED');
+    like($vars->{'DATE_LOCAL'}, qr{\d}, "default_ssi_variables has DATE_LOCAL $vars->{'DATE_LOCAL'}");
+    is($vars->{'DOCUMENT_NAME'}, 't/file/readline.txt', 'default_ssi_variables has DOCUMENT_NAME');
+    is($vars->{'DOCUMENT_URI'}, 'http://foo.com/bar.html', 'default_ssi_variables has DOCUMENT_URI');
+    like($vars->{'LAST_MODIFIED'}, qr{\d}, "default_ssi_variables has LAST_MODIFIED $vars->{'LAST_MODIFIED'}");
+    is($vars->{'QUERY_STRING_UNESCAPED'}, 'a=42&b=24', 'default_ssi_variables has QUERY_STRING_UNESCAPED');
 }
 
 {
@@ -114,22 +109,21 @@ SKIP: {
     like($res->[2][0], qr{DOCUMENT_NAME=t/file/index.html}, 'index.html contains DOCUMENT_NAME');
 }
 
-sub dummy_filehandle {
-    my $buf = shift || "-->after";
+sub ssi_fh {
+    my $buf = 'B<!--#' .shift(@_) .' -->A';
     open my $FH, '<', \$buf;
     return $FH;
 }
 
-sub elif_else_filehandle {
+sub if_elif_else_filehandle {
     my $buf = <<'IF_ELIF_ELSE';
--->
-FOO
-<!--#elif expr="${BAR}" -->
-BAR
+<!--#if expr="${A}" -->
+IF
+<!--#elif expr="${B}" -->
+ELIF
 <!--#else -->
 ELSE
-<!--#endif -->
-after
+<!--#endif -->after
 IF_ELIF_ELSE
 
     open my $FH, '<', \$buf;
