@@ -1,9 +1,12 @@
 NAME
-    Plack::App::File::SSI - Extension of Plack::App::File to serve SSI
+    Plack::Middleware::SSI - PSGI middleware for server side include content
+
+VERSION
+    0.10
 
 DESCRIPTION
     Will try to handle HTML with server side include directives as well as
-    doing what Plack::App::File does for "regular files".
+    doing what Plack::Middleware does for "regular files".
 
 SUPPORTED SSI DIRECTIVES
     See <http://httpd.apache.org/docs/2.0/mod/mod_include.html>,
@@ -40,24 +43,14 @@ SUPPORTED SSI VARIABLES
     compatible with Apache and friends.
 
 SYNOPSIS
-    See Plack::App::File.
+        $app = builder { enable 'SSI'; $app };
+
+    See Plack::Middleware for more details.
 
 METHODS
-  serve_path
-    Will do the same as "serve_path" in Plack::App::File, unless for files
-    with mimetype "text/html": Will use "serve_ssi" then.
-
-  serve_ssi
-        [$status, $headers, [$text]] = $self->serve_ssi($env, $file);
-
-    Will parse the file and search for SSI statements.
-
-  parse_ssi_from_filehandle
-        $text = $self->parse_ssi_from_filehandle($FH, \%variables);
-
-    Will return the content from $FH as a plain string, where all SSI
-    directives are expanded. All expression which could not be expanded will
-    be replaced with "[an error occurred while processing this directive]".
+  call
+    Returns a callback which can expand chunks of HTML with SSI directives
+    to a complete HTML document.
 
 COPYRIGHT & LICENSE
     This library is free software. You can redistribute it and/or modify it

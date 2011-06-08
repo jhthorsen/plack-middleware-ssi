@@ -4,6 +4,10 @@ package Plack::Middleware::SSI;
 
 Plack::Middleware::SSI - PSGI middleware for server side include content
 
+=head1 VERSION
+
+0.10
+
 =head1 DESCRIPTION
 
 Will try to handle HTML with server side include directives as well as doing
@@ -55,7 +59,9 @@ it may not be compatible with Apache and friends.
 
 =head1 SYNOPSIS
 
-See L<Plack::Middleware>.
+    $app = builder { enable 'SSI'; $app };
+
+See L<Plack::Middleware> for more details.
 
 =cut
 
@@ -67,8 +73,11 @@ use HTTP::Date;
 use HTTP::Request;
 use HTTP::Response;
 use HTTP::Message::PSGI;
-use base 'Plack::Middleware';
 use constant DEBUG => $ENV{'PLACK_SSI_TRACE'} ? 1 : 0;
+
+use base 'Plack::Middleware';
+
+our $VERSION = eval '0.10';
 
 my $SSI_EXPRESSION_START = qr{<!--\#};
 my $SSI_EXPRESSION_END = qr{\s*-->};
@@ -83,12 +92,15 @@ my $BUF = '__________BUF__________';
 
 =head2 call
 
+Returns a callback which can expand chunks of HTML with SSI directives
+to a complete HTML document.
+
 =cut
 
 sub call {
     my($self, $env) = @_;
 
-    $self->response_cb($self->app->($env), sub {
+    return $self->response_cb($self->app->($env), sub {
         my $res = shift;
         my $headers = Plack::Util::headers($res->[1]);
         my $content_type = $headers->get('Content-Type') || '';
@@ -106,6 +118,8 @@ sub call {
 
             return sub { $self->_parse_ssi_chunk($ssi_variables, @_) };
         }
+
+        return;
     });
 }
 
