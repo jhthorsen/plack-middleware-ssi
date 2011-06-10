@@ -8,11 +8,11 @@ use Plack::Builder;
 use Test::More;
 
 plan skip_all => 'no test files' unless -d 't/file';
-plan tests => 29;
+plan tests => 31;
 
 my $app = Plack::App::File->new(root => 't/file')->to_app;
 my $SSI = 'Plack::Middleware::SSI';
-my $TIME_RE = qr{\w+, \d+-\w+-\d+ [\d:]+};
+my $TIME_RE = qr{\d+:\d+:\d+};
 my($res, $vars);
 
 {
@@ -61,8 +61,12 @@ my($res, $vars);
     $res = $SSI->_parse_ssi_chunk({}, ssi_str('fsize file="t/file/readline.txt"'));
     is($res, 'BEFORE23', 'SSI fsize: return 23');
 
-    $res = $SSI->_parse_ssi_chunk({}, ssi_str('flastmod file="t/file/readline.txt"'));
-    like($res, qr"^BEFORE$TIME_RE \w+$", 'SSI flastmod: return time string');
+    $res = $SSI->_parse_ssi_chunk($vars, ssi_str('config timefmt="%H:%M:%S"'));
+    is($res, 'BEFORE', 'SSI config: timefmt was parsed');
+    is($vars->{'__________CONFIG__________'}{'timefmt'}, '%H:%M:%S', 'timefmt was set');
+
+    $res = $SSI->_parse_ssi_chunk($vars, ssi_str('flastmod file="t/file/readline.txt"'));
+    like($res, qr"^BEFORE$TIME_RE$", 'SSI flastmod: return time string');
 
     $res = $SSI->_parse_ssi_chunk({}, ssi_str('include virtual="readline.txt"'));
     is($res, "BEFOREfirst line\nsecond line\n", 'SSI include: return readline.txt');
@@ -105,9 +109,9 @@ SKIP: {
         like($content, qr{^<!DOCTYPE HTML}, 'parsed result contain beginning...');
         like($content, qr{</html>$}, '..and end of html file');
         like($content, qr{DOCUMENT_NAME=index.html}, 'index.html contains DOCUMENT_NAME');
-        like($content, qr{DATE_GMT=$TIME_RE GMT}, 'index.html contains DATE_GMT');
-        like($content, qr{DATE_LOCAL=$TIME_RE \w+}, 'index.html contains DATE_LOCAL');
-        like($content, qr{LAST_MODIFIED=$TIME_RE \w+}, 'index.html contains LAST_MODIFIED');
+        like($content, qr{DATE_GMT=$TIME_RE}, 'index.html contains DATE_GMT');
+        like($content, qr{DATE_LOCAL=$TIME_RE}, 'index.html contains DATE_LOCAL');
+        like($content, qr{LAST_MODIFIED=$TIME_RE}, 'index.html contains LAST_MODIFIED');
     };
 }
 

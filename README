@@ -2,7 +2,7 @@ NAME
     Plack::Middleware::SSI - PSGI middleware for server side include content
 
 VERSION
-    0.10
+    0.11
 
 DESCRIPTION
     Will try to handle HTML with server side include directives as well as
@@ -18,6 +18,10 @@ SUPPORTED SSI DIRECTIVES
 
   echo
         <!--#echo var="SOME_VAR" -->
+
+  config
+        <!--#config timefmt="..." -->
+        <!--#config errmsg="..." -->
 
   exec
         <!--#exec cmd="ls -l" -->

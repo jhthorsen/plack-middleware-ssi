@@ -6,7 +6,7 @@ Plack::Middleware::SSI - PSGI middleware for server side include content
 
 =head1 VERSION
 
-0.10
+0.11
 
 =head1 DESCRIPTION
 
@@ -26,6 +26,11 @@ L<http://en.wikipedia.org/wiki/Server_Side_Includes> for more details.
 =head2 echo
 
     <!--#echo var="SOME_VAR" -->
+
+=head2 config
+
+    <!--#config timefmt="..." -->
+    <!--#config errmsg="..." -->
 
 =head2 exec
 
@@ -77,7 +82,7 @@ use constant DEBUG => $ENV{'PLACK_SSI_TRACE'} ? 1 : 0;
 
 use base 'Plack::Middleware';
 
-our $VERSION = eval '0.10';
+our $VERSION = eval '0.11';
 
 my $SSI_EXPRESSION_START = qr{<!--\#};
 my $SSI_EXPRESSION_END = qr{\s*-->};
@@ -170,7 +175,7 @@ sub _parse_ssi_chunk {
 sub _ssi_exp_set {
     my($self, $expression, $ssi_variables) = @_;
     my $name = $expression =~ /var="([^"]+)"/ ? $1 : undef;
-    my $value = $expression =~ /value="([^"]+)"/ ? $1 : '';
+    my $value = $expression =~ /value="([^"]*)"/ ? $1 : '';
 
     if(defined $name) {
         $ssi_variables->{$name} = $value;
@@ -191,6 +196,17 @@ sub _ssi_exp_echo {
     }
 
     warn "Found SSI echo expression, but no variable name ($expression)" if DEBUG;
+    return '';
+}
+
+sub _ssi_exp_config {
+    my($self, $expression, $ssi_variables) = @_;
+    my($key, $value) = $expression =~ /(\w+)="([^"]*)"/ ? ($1, $2) : ();
+
+    if(defined $key) {
+        $ssi_variables->{$CONFIG}{$key} = $value;
+    }
+
     return '';
 }
 
@@ -337,7 +353,7 @@ sub __eval_condition {
     if($expression =~ /\$/) { # 1 is always true. do not need variables to figure that out
         my $fmt = $ssi_variables->{$CONFIG}{'timefmt'} || $DEFAULT_TIMEFMT;
 
-        $ssi_variables->{"__{$fmt}__DATE_GMT"} ||= do { local $_ = POSIX::strftime($fmt, gmtime); s/\w+$/GMT/; $_ };
+        $ssi_variables->{"__{$fmt}__DATE_GMT"} ||= do { local $_ = POSIX::strftime($fmt, gmtime); $_ };
         $ssi_variables->{"__{$fmt}__DATE_LOCAL"} ||= POSIX::strftime($fmt, localtime);
         $ssi_variables->{'DATE_GMT'} = $ssi_variables->{"__{$fmt}__DATE_GMT"};
         $ssi_variables->{'DATE_LOCAL'} = $ssi_variables->{"__{$fmt}__DATE_LOCAL"};
