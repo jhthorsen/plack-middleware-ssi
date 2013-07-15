@@ -140,28 +140,24 @@ sub _parse_ssi_chunk {
 
     $$buf .= $chunk;
 
-    while($$buf =~ $SSI_EXPRESSION_START) {
-        my($expression, $expression_end_pos, $method, $value);
+    while($$buf =~ /$SSI_EXPRESSION_START(?:.*?)($SSI_EXPRESSION_END)/) {
         my $expression_start_pos = $-[0];
-
-        if($$buf =~ s/$SSI_EXPRESSION_END//) {
-            $expression_end_pos = $-[0];
-        }
-        else {
-            last; # no use unless ssi expression end is found
-        }
+        my $expression_end_pos = $-[1];
 
         $text .= substr $$buf, 0, $expression_start_pos unless($ssi_variables->{$SKIP});
-        $expression = substr $$buf, $expression_start_pos, $expression_end_pos - $expression_start_pos;
+        my $expression = substr $$buf, $expression_start_pos, $expression_end_pos - $expression_start_pos;
         $$buf = substr $$buf, $expression_end_pos; # after expression
-        $method = $expression =~ s/^\W+(\w+)// ? "_ssi_exp_$1" : '_ssi_exp_unknown';
+        $$buf =~ s/^$SSI_EXPRESSION_END//;
+        my $method = $expression =~ s/^\W+(\w+)// ? "_ssi_exp_$1" : '_ssi_exp_unknown';
 
-        if($self->can($method)) {
-            $value = $self->$method($expression, $ssi_variables);
-        }
-        else {
-            $value = $ssi_variables->{$CONFIG}{'errmsg'} || $DEFAULT_ERRMSG;
-        }
+        my $value = do {
+            if($self->can($method)) {
+                $self->$method($expression, $ssi_variables);
+            }
+            else {
+                $ssi_variables->{$CONFIG}{'errmsg'} || $DEFAULT_ERRMSG;
+            }
+        };
 
         $text .= $value unless($ssi_variables->{$SKIP});
     }

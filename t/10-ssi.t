@@ -106,6 +106,8 @@ SKIP: {
             is($res->header('Content-Length'), 12345, '..and with Content-Length');
         }
 
+        unlike($content, qr{DOCUMENT_NAME=<!--index.html}, 'Comment bug no longer present');
+
         like($content, qr{^<!DOCTYPE HTML}, 'parsed result contain beginning...');
         like($content, qr{</html>$}, '..and end of html file');
         like($content, qr{DOCUMENT_NAME=index.html}, 'index.html contains DOCUMENT_NAME');
