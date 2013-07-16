@@ -8,7 +8,7 @@ use Plack::Builder;
 use Test::More;
 
 plan skip_all => 'no test files' unless -d 't/file';
-plan tests => 31;
+plan tests => 30;
 
 my $app = Plack::App::File->new(root => 't/file')->to_app;
 my $SSI = 'Plack::Middleware::SSI';
@@ -45,31 +45,30 @@ my($res, $vars);
 
     $vars = vars();
     $res = $SSI->_parse_ssi_chunk($vars, ssi_str('invalid expression'));
-    is($res, 'BEFORE[an error occurred while processing this directive]', 'SSI invalid expression: return comment');
-    is($SSI->_parse_ssi_chunk($vars), '12345', 'got 12345 at end');
+    is($res, 'BEFORE[an error occurred while processing this directive]AFTER', 'SSI invalid expression: return comment');
 
     $res = $SSI->_parse_ssi_chunk($vars, ssi_str('set var="foo" value="123"'));
-    is($res, 'BEFORE', 'SSI set: will not result in any value');
+    is($res, 'BEFOREAFTER', 'SSI set: will not result in any value');
     is($vars->{'foo'}, 123, 'SSI set: variable foo was found in expression');
 
-    $res = $SSI->_parse_ssi_chunk({ foo => 123 }, ssi_str('echo var="foo"'));
-    is($res, 'BEFORE123', 'SSI echo: return 123');
+    $res = $SSI->_parse_ssi_chunk({ foo => 'bar' }, ssi_str('echo var="foo"'));
+    is($res, 'BEFOREbarAFTER', 'SSI echo: return foo');
 
     $res = $SSI->_parse_ssi_chunk({}, ssi_str('echo var="foo"'));
-    is($res, 'BEFORE', 'SSI echo: return empty string');
+    is($res, 'BEFOREAFTER', 'SSI echo: return empty string');
 
     $res = $SSI->_parse_ssi_chunk({}, ssi_str('fsize file="t/file/readline.txt"'));
-    is($res, 'BEFORE23', 'SSI fsize: return 23');
+    is($res, 'BEFORE23AFTER', 'SSI fsize: return 23');
 
     $res = $SSI->_parse_ssi_chunk($vars, ssi_str('config timefmt="%H:%M:%S"'));
-    is($res, 'BEFORE', 'SSI config: timefmt was parsed');
+    is($res, 'BEFOREAFTER', 'SSI config: timefmt was parsed');
     is($vars->{'__________CONFIG__________'}{'timefmt'}, '%H:%M:%S', 'timefmt was set');
 
     $res = $SSI->_parse_ssi_chunk($vars, ssi_str('flastmod file="t/file/readline.txt"'));
-    like($res, qr"^BEFORE$TIME_RE$", 'SSI flastmod: return time string');
+    like($res, qr(^BEFORE${TIME_RE}AFTER$), 'SSI flastmod: return time string');
 
     $res = $SSI->_parse_ssi_chunk({}, ssi_str('include virtual="readline.txt"'));
-    is($res, "BEFOREfirst line\nsecond line\n", 'SSI include: return readline.txt');
+    is($res, "BEFOREfirst line\nsecond line\nAFTER", 'SSI include: return readline.txt');
 
     $vars = vars();
     $res = $SSI->_parse_ssi_chunk($vars, if_elif_else()) .$SSI->_parse_ssi_chunk($vars);
@@ -116,7 +115,7 @@ SKIP: {
 }
 
 sub ssi_str {
-    return 'BEFORE<!--#' .shift(@_) .' -->12345';
+    return 'BEFORE<!--#' .shift(@_) .' -->AFTER';
 }
 
 sub if_elif_else {
