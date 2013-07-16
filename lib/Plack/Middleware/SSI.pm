@@ -84,8 +84,6 @@ use base 'Plack::Middleware';
 
 our $VERSION = eval '0.11';
 
-my $SSI_EXPRESSION_START = qr{<!--\#};
-my $SSI_EXPRESSION_END = qr{\s*-->};
 my $DEFAULT_ERRMSG = '[an error occurred while processing this directive]';
 my $DEFAULT_TIMEFMT = '%A, %d-%b-%Y %H:%M:%S %Z';
 my $ANON = 'Plack::Middleware::SSI::__ANON__';
@@ -128,10 +126,24 @@ sub call {
     });
 }
 
+# will match partial expression at end of string
+my $SSI_EXPRESSION = qr{
+     <         (?:\z| # accept end-of-string after each character
+     !         (?:\z|
+     -         (?:\z|
+     -         (?:\z|
+     \#        (?:\z|
+     (.*?) \s* (?:\z| # this capture contains the actual expression
+     -         (?:\z|
+     -         (?:\z|
+    (>)               # this capture serves as a flag that we reached end-of-expr
+    ))))))))
+}sx;
+
 sub _parse_ssi_chunk {
     my($self, $ssi_variables, $chunk) = @_;
     my $buf = $ssi_variables->{$BUF};
-    my $text = '';
+    my $out = \do { my $tmp = '' };
 
     unless(defined $chunk) {
         return $$buf if(delete $ssi_variables->{$BUF}); # return the rest of buffer
@@ -140,33 +152,31 @@ sub _parse_ssi_chunk {
 
     $$buf .= $chunk;
 
-    while($$buf =~ $SSI_EXPRESSION_START) {
-        my($expression, $expression_end_pos, $method, $value);
-        my $expression_start_pos = $-[0];
+    my $do_keep_buffer;
 
-        if($$buf =~ s/$SSI_EXPRESSION_END//) {
-            $expression_end_pos = $-[0];
-        }
-        else {
-            last; # no use unless ssi expression end is found
-        }
+    while(my($expression, $is_complete) = $$buf =~ $SSI_EXPRESSION) {
+        $$out .= substr $$buf, 0, $-[0] unless($ssi_variables->{$SKIP});
+        $$buf  = substr $$buf, $is_complete ? $+[0] : $-[0];
 
-        $text .= substr $$buf, 0, $expression_start_pos unless($ssi_variables->{$SKIP});
-        $expression = substr $$buf, $expression_start_pos, $expression_end_pos - $expression_start_pos;
-        $$buf = substr $$buf, $expression_end_pos; # after expression
-        $method = $expression =~ s/^\W+(\w+)// ? "_ssi_exp_$1" : '_ssi_exp_unknown';
+        # matched incompletely at end of string,
+        # will need more chunks to finish the expression
+        $do_keep_buffer = 1, last if not $is_complete;
 
-        if($self->can($method)) {
-            $value = $self->$method($expression, $ssi_variables);
-        }
-        else {
-            $value = $ssi_variables->{$CONFIG}{'errmsg'} || $DEFAULT_ERRMSG;
-        }
+        my $method = $expression =~ s/^(\w+)// ? "_ssi_exp_$1" : '_ssi_exp_unknown';
+        my $value = $self->can($method)
+            ? $self->$method($expression, $ssi_variables)
+            : $ssi_variables->{$CONFIG}{'errmsg'} || $DEFAULT_ERRMSG;
 
-        $text .= $value unless($ssi_variables->{$SKIP});
+        $$out .= $value unless($ssi_variables->{$SKIP});
     }
 
-    return $text;
+    if(not $do_keep_buffer) {
+        length $$out ? ($$out .= $$buf) : ($out = $buf) # swap when possible, append if necessary
+            unless($ssi_variables->{$SKIP});
+        $ssi_variables->{$BUF} = \do { my $tmp = '' };
+    }
+
+    return $$out;
 }
 
 #=============================================================================
