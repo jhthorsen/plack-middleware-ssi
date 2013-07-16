@@ -3,4 +3,6 @@
 /Makefile
 /blib/
 /pm_to_blib
+/Makefile.old
+/MYMETA*
 *.swp
