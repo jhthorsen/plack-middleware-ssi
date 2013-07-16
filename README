@@ -2,7 +2,7 @@ NAME
     Plack::Middleware::SSI - PSGI middleware for server side include content
 
 VERSION
-    0.11
+    0.12
 
 DESCRIPTION
     Will try to handle HTML with server side include directives as well as

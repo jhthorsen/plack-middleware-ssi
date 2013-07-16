@@ -6,7 +6,7 @@ Plack::Middleware::SSI - PSGI middleware for server side include content
 
 =head1 VERSION
 
-0.11
+0.12
 
 =head1 DESCRIPTION
 
@@ -82,7 +82,7 @@ use constant DEBUG => $ENV{'PLACK_SSI_TRACE'} ? 1 : 0;
 
 use base 'Plack::Middleware';
 
-our $VERSION = '0.11';
+our $VERSION = '0.12';
 
 my $DEFAULT_ERRMSG = '[an error occurred while processing this directive]';
 my $DEFAULT_TIMEFMT = '%A, %d-%b-%Y %H:%M:%S %Z';

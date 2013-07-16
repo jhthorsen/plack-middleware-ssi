@@ -1,5 +1,9 @@
 Revision history for Plack::Middleware::SSI
 
+0.12     Tue Jul 16 17:28:41 2013
+       - fix, simplify and optimize _parse_ssi_chunk
+         Merge pull request #1 from ap/fix-parser by Aristotle Pagaltzis
+
 0.11     Fri Jun 10 16:28:59 CEST 2011
        - Add support for <!--#config ... -->
 
