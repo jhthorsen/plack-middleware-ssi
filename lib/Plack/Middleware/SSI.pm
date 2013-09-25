@@ -249,7 +249,7 @@ sub _ssi_exp_flastmod {
 
 sub _ssi_exp_include {
     my($self, $expression, $ssi_variables) = @_;
-    my $file = $self->_expression_to_file($expression) or return '';
+    my $file = $self->_expression_to_file($expression, $ssi_variables) or return '';
     my $buf = '';
     my $text = '';
 
@@ -300,7 +300,7 @@ sub _ssi_exp_endif {
 }
 
 sub _expression_to_file {
-    my($self, $expression) = @_;
+    my($self, $expression, $ssi_variables) = @_;
 
     if($expression =~ /file="([^"]+)"/) {
         my $file = $1;
@@ -310,7 +310,14 @@ sub _expression_to_file {
     }
     elsif($expression =~ /virtual="([^"]+)"/) {
         my $file = $1;
-        my $request = HTTP::Request->new(GET => $file);
+
+        my @hdrs = map {
+            $_ => $ssi_variables->{"HTTP_$_"}
+        } grep {
+            s/^(HTTP_)//
+        } keys $ssi_variables;
+
+        my $request = HTTP::Request->new(GET => $file, \@hdrs);
         my $response;
 
         $request->uri->scheme('http') unless(defined $request->uri->scheme);
