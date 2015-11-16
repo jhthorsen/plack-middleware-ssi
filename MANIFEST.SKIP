@@ -6,4 +6,5 @@
 ^blib/
 ^Makefile$
 ^MANIFEST.*
+^MYMETA.*
 ^Plack-Middleware-SSI
