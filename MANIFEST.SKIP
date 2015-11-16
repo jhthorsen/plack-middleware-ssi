@@ -8,3 +8,4 @@
 ^MANIFEST.*
 ^MYMETA.*
 ^Plack-Middleware-SSI
+^pm_to_blib$
