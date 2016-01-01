@@ -8,7 +8,7 @@ use Plack::Builder;
 use Test::More;
 
 plan skip_all => 'no test files' unless -d 't/file';
-plan tests => 30;
+plan tests => 32;
 
 my $app = Plack::App::File->new(root => 't/file')->to_app;
 my $SSI = 'Plack::Middleware::SSI';
@@ -111,6 +111,36 @@ SKIP: {
         like($content, qr{DATE_GMT=$TIME_RE}, 'index.html contains DATE_GMT');
         like($content, qr{DATE_LOCAL=$TIME_RE}, 'index.html contains DATE_LOCAL');
         like($content, qr{LAST_MODIFIED=$TIME_RE}, 'index.html contains LAST_MODIFIED');
+    };
+}
+
+{
+    use Plack::Request;
+    local $Plack::Test::Impl = 'Server';
+
+    my $app = sub {
+        my $req = Plack::Request->new(shift);
+
+        my $res = $req->new_response(200);
+        $res->content_type('text/html');
+
+        if ($req->path_info =~ m{^/env$}) {
+            ok exists $req->env->{HTTP_USER_AGENT}, 'UA key exists';
+            $res->body('UA: ' . $req->env->{HTTP_USER_AGENT});
+        } else {
+            $res->body('<!--#include virtual="/env"-->');
+        }
+        return $res->finalize;
+    };
+
+    my $ssi_app = builder { enable 'SSI'; $app };
+    test_psgi
+        app => $ssi_app,
+        client => sub {
+            my $cb  = shift;
+            my $req = HTTP::Request->new(GET => "http://localhost/");
+            my $res = $cb->($req);
+            like $res->content, qr/^UA: HTTP-Tiny/, 'UA matches';
     };
 }
 
