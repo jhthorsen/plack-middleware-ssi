@@ -108,7 +108,7 @@ sub call {
         my $headers = Plack::Util::headers($res->[1]);
         my $content_type = $headers->get('Content-Type') || '';
 
-        if($content_type =~ m{^text/} or $content_type =~ m{^application/xh?t?ml\b}) {
+        if($content_type =~ m{^text/} or $content_type =~ m{^application/x(?:ht)?ml\b}) {
             my $buf = '';
             my $ssi_variables = {
                 %$env,
