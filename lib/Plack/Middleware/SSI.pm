@@ -315,7 +315,7 @@ sub _expression_to_file {
             $_ => $ssi_variables->{"HTTP_$_"}
         } grep {
             s/^(HTTP_)//
-        } keys $ssi_variables;
+        } keys %$ssi_variables;
 
         my $request = HTTP::Request->new(GET => $file, \@hdrs);
         my $response;
