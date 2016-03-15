@@ -1,5 +1,8 @@
 Revision history for Plack::Middleware::SSI
 
+0.14     Tue Mar 15 09:05:15 2016
+       - fix content type matching bug (thanks bireon)
+
 0.13     Tue Mar 15 09:05:00 2016
        - fix RT # 110455 experimental keys on references bug (thanks SREZIC)
 
