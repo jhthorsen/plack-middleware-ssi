@@ -1,5 +1,8 @@
 Revision history for Plack::Middleware::SSI
 
+0.13     Tue Mar 15 09:05:00 2016
+       - fix RT # 110455 experimental keys on references bug (thanks SREZIC)
+
 0.12     Tue Jul 16 17:28:41 2013
        - fix, simplify and optimize _parse_ssi_chunk
          Merge pull request #1 from ap/fix-parser by Aristotle Pagaltzis
