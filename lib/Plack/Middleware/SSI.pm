@@ -106,9 +106,9 @@ sub call {
     return $self->response_cb($self->app->($env), sub {
         my $res = shift;
         my $headers = Plack::Util::headers($res->[1]);
+        $DB::single=1;
         my $content_type = $headers->get('Content-Type') || '';
-
-        if($content_type =~ m{^text/} or $content_type =~ m{^application/x(?:ht)?ml\b}) {
+        if(_matching_content_type($content_type)) {
             my $buf = '';
             my $ssi_variables = {
                 %$env,
@@ -124,6 +124,12 @@ sub call {
 
         return;
     });
+}
+
+sub _matching_content_type {
+    my ($ct) = @_;
+    return ( $ct =~ m{^text/} 
+        or $ct =~ m{^application/x(?:ht)?ml\b});
 }
 
 # will match partial expression at end of string
