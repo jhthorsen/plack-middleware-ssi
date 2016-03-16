@@ -106,7 +106,6 @@ sub call {
     return $self->response_cb($self->app->($env), sub {
         my $res = shift;
         my $headers = Plack::Util::headers($res->[1]);
-        $DB::single=1;
         my $content_type = $headers->get('Content-Type') || '';
         if(_matching_content_type($content_type)) {
             my $buf = '';
